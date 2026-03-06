@@ -23,6 +23,12 @@ DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 DASHBOARD_URL         = os.getenv("DASHBOARD_URL", "http://localhost:8080")
 SECRET_KEY            = os.getenv("SECRET_KEY", secrets.token_hex(32))
 
+# IDs Discord degli utenti autorizzati (separati da virgola).
+# Se vuoto, chiunque sia nel server può accedere.
+# Esempio: DASHBOARD_OWNER_IDS=123456789,987654321
+_raw_owners = os.getenv("DASHBOARD_OWNER_IDS", "")
+OWNER_IDS: set[str] = {x.strip() for x in _raw_owners.split(",") if x.strip()}
+
 DISCORD_API   = "https://discord.com/api/v10"
 REDIRECT_URI  = f"{DASHBOARD_URL}/auth/callback"
 OAUTH2_URL    = (
@@ -59,6 +65,9 @@ def _require_session(request: Request) -> dict:
     data = _get_session(request)
     if not data:
         raise HTTPException(status_code=401, detail="Non autenticato")
+    # Controllo owner: se DASHBOARD_OWNER_IDS è configurato, solo quegli utenti entrano
+    if OWNER_IDS and data.get("user_id") not in OWNER_IDS:
+        raise HTTPException(status_code=403, detail="Accesso riservato al proprietario del bot")
     return data
 
 def _require_guild_access(guild_id: int, session: dict, bot) -> None:
@@ -166,13 +175,17 @@ def create_app(bot) -> FastAPI:
                 common_guilds.append({
                     "id":   str(g.id),
                     "name": g.name,
-                    "icon": f"https://cdn.discordapp.com/icons/{g.id}/{g.icon}.png" if g.icon else None,
+                    # g.icon è un oggetto Asset in discord.py v2: usare .url
+                    "icon": g.icon.url if g.icon else None,
                 })
+        av = session.get("avatar")
+        uid = session["user_id"]
         return {
             "user": {
                 "id":       uid,
                 "username": session["username"],
-                "avatar":   f"https://cdn.discordapp.com/avatars/{uid}/{av}.png" if av else None,
+                "avatar":   f"https://cdn.discordapp.com/avatars/{uid}/{av}.png?size=128" if av else
+                            f"https://cdn.discordapp.com/embed/avatars/{int(uid) % 5}.png",
             },
             "guilds": common_guilds,
         }
