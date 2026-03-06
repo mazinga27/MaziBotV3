@@ -6,6 +6,10 @@ from discord.ext import commands
 import logging
 import asyncio
 import sys
+import static_ffmpeg
+
+# ── FFmpeg — aggiunge automaticamente il binario al PATH (funziona su Railway e qualsiasi OS)
+static_ffmpeg.add_paths()
 
 from config import DISCORD_TOKEN, BOT_PREFIX
 
