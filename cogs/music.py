@@ -36,6 +36,11 @@ COLOR_ERROR   = 0xED4245
 COLOR_INFO    = 0x3498DB
 COLOR_SPOTIFY = 0x1DB954
 
+# ── Auto-cancellazione messaggi (secondi) ─────────────────────────────────────
+DEL_SHORT  = 5    # conferme rapide (skip, stop, pause, loop…)
+DEL_MEDIUM = 15   # info (aggiunto in coda, errori, volume…)
+DEL_LONG   = 25   # embed ricchi (coda, now playing, Spotify)
+
 
 # ── Modello canzone ───────────────────────────────────────────────────────────
 @dataclass
@@ -218,8 +223,11 @@ class Music(commands.Cog):
         if not state.queue:
             state.current = None
             asyncio.run_coroutine_threadsafe(
-                channel.send(embed=_embed("📭  Coda terminata",
-                    "Non ci sono altri brani.\nUsa `/play` per aggiungerne uno!", color=COLOR_INFO)),
+                channel.send(
+                    embed=_embed("📭  Coda terminata",
+                        "Non ci sono altri brani.\nUsa `/play` per aggiungerne uno!", color=COLOR_INFO),
+                    delete_after=DEL_MEDIUM,
+                ),
                 self.bot.loop,
             )
             return
@@ -258,12 +266,15 @@ class Music(commands.Cog):
                 ),
             )
             log.info(f"[{guild_name}] ▶ {song.title} ({song.duration_str})")
-            await channel.send(embed=_song_embed(song))
+            await channel.send(embed=_song_embed(song), delete_after=DEL_LONG)
 
         except Exception as exc:
             log.error(f"[{guild_name}] Errore stream: {type(exc).__name__}: {exc}", exc_info=True)
             msg = str(exc) if str(exc) else type(exc).__name__
-            await channel.send(embed=_embed("❌  Errore stream", f"`{msg}`\nRiprova con `/play`.", color=COLOR_ERROR))
+            await channel.send(
+                embed=_embed("❌  Errore stream", f"`{msg}`\nRiprova con `/play`.", color=COLOR_ERROR),
+                delete_after=DEL_MEDIUM,
+            )
             self._play_next(channel, state, guild_name)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -282,7 +293,8 @@ class Music(commands.Cog):
 
         if info is None:
             await interaction.followup.send(
-                embed=_embed("❌  Non trovato", f"Nessun risultato per: `{query}`", color=COLOR_ERROR)
+                embed=_embed("❌  Non trovato", f"Nessun risultato per: `{query}`", color=COLOR_ERROR),
+                delete_after=DEL_MEDIUM,
             )
             return
 
@@ -296,11 +308,12 @@ class Music(commands.Cog):
             e.add_field(name="📋  Posizione", value=f"`#{len(state.queue)}`",  inline=True)
             if song.thumbnail:
                 e.set_thumbnail(url=song.thumbnail)
-            await interaction.followup.send(embed=_footer(e, interaction.user))
+            await interaction.followup.send(embed=_footer(e, interaction.user), delete_after=DEL_MEDIUM)
         else:
             state.current = song
             await interaction.followup.send(
-                embed=_embed("🔍  Trovato!", f"Avvio **{song.title}**…", color=COLOR_INFO)
+                embed=_embed("🔍  Trovato!", f"Avvio **{song.title}**…", color=COLOR_INFO),
+                delete_after=DEL_SHORT,
             )
             await self._stream(interaction.channel, state, song, interaction.guild.name)
 
@@ -315,7 +328,8 @@ class Music(commands.Cog):
 
         if not data or not data.get("entries"):
             await interaction.followup.send(
-                embed=_embed("❌  Nessun risultato", f"Nessun brano trovato per: `{query}`", color=COLOR_ERROR)
+                embed=_embed("❌  Nessun risultato", f"Nessun brano trovato per: `{query}`", color=COLOR_ERROR),
+                delete_after=DEL_MEDIUM,
             )
             return
 
@@ -327,7 +341,7 @@ class Music(commands.Cog):
         e = discord.Embed(title="🔍  Risultati ricerca", description=lines, color=COLOR_INFO)
         e.set_footer(text="Usa /play <testo> per riprodurre  •  MaziBot 🎵")
         e.timestamp = discord.utils.utcnow()
-        await interaction.followup.send(embed=e)
+        await interaction.followup.send(embed=e, delete_after=DEL_LONG)
 
     @app_commands.command(name="spotify", description="Carica una playlist, album o singolo da Spotify.")
     @app_commands.describe(url="URL Spotify di playlist, album o singolo")
@@ -338,7 +352,8 @@ class Music(commands.Cog):
         if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
             await interaction.followup.send(
                 embed=_embed("❌  Spotify non configurato",
-                    "Aggiungi `SPOTIFY_CLIENT_ID` e `SPOTIFY_CLIENT_SECRET` nel file `.env`.", color=COLOR_ERROR)
+                    "Aggiungi `SPOTIFY_CLIENT_ID` e `SPOTIFY_CLIENT_SECRET` nel file `.env`.", color=COLOR_ERROR),
+                delete_after=DEL_MEDIUM,
             )
             return
 
@@ -346,7 +361,8 @@ class Music(commands.Cog):
         if not track_names:
             await interaction.followup.send(
                 embed=_embed("❌  Errore Spotify",
-                    "Impossibile leggere l'URL. Controlla che sia una playlist/album/traccia pubblica.", color=COLOR_ERROR)
+                    "Impossibile leggere l'URL. Controlla che sia una playlist/album/traccia pubblica.", color=COLOR_ERROR),
+                delete_after=DEL_MEDIUM,
             )
             return
 
@@ -375,7 +391,10 @@ class Music(commands.Cog):
         log.info(f"[{interaction.guild.name}] Spotify: {added}/{len(track_names)} brani caricati")
         done = discord.Embed(description=f"**{added}** brani aggiunti in coda con successo!", color=COLOR_SUCCESS)
         done.set_author(name="✅  Playlist Spotify caricata")
+        # Modifica il messaggio di caricamento con il risultato e poi lo elimina
         await loading_msg.edit(embed=_footer(done, interaction.user))
+        await asyncio.sleep(DEL_LONG)
+        await loading_msg.delete()
 
     @app_commands.command(name="skip", description="Salta il brano corrente e passa al prossimo.")
     async def skip(self, interaction: discord.Interaction):
@@ -390,7 +409,8 @@ class Music(commands.Cog):
         state.voice_client.stop()
         log.info(f"[{interaction.guild.name}] Skip da {interaction.user.display_name}")
         await interaction.response.send_message(
-            embed=_embed("⏭️  Skippato", f"Brano saltato da **{interaction.user.display_name}**.", color=COLOR_ACTION)
+            embed=_embed("⏭️  Skippato", f"Brano saltato da **{interaction.user.display_name}**.", color=COLOR_ACTION),
+            delete_after=DEL_SHORT,
         )
 
     @app_commands.command(name="stop", description="Ferma la riproduzione e svuota tutta la coda.")
@@ -403,7 +423,8 @@ class Music(commands.Cog):
             state.voice_client.stop()
         log.info(f"[{interaction.guild.name}] Stop da {interaction.user.display_name}")
         await interaction.response.send_message(
-            embed=_embed("⏹️  Fermato", "Riproduzione fermata e coda svuotata.", color=COLOR_ACTION)
+            embed=_embed("⏹️  Fermato", "Riproduzione fermata e coda svuotata.", color=COLOR_ACTION),
+            delete_after=DEL_SHORT,
         )
 
     @app_commands.command(name="pause", description="Mette in pausa la riproduzione.")
@@ -412,7 +433,8 @@ class Music(commands.Cog):
         if state.is_playing():
             state.voice_client.pause()
             await interaction.response.send_message(
-                embed=_embed("⏸️  In pausa", "Usa `/resume` per riprendere.", color=COLOR_ACTION)
+                embed=_embed("⏸️  In pausa", "Usa `/resume` per riprendere.", color=COLOR_ACTION),
+                delete_after=DEL_SHORT,
             )
         else:
             await interaction.response.send_message(
@@ -425,7 +447,8 @@ class Music(commands.Cog):
         if state.is_paused():
             state.voice_client.resume()
             await interaction.response.send_message(
-                embed=_embed("▶️  Ripresa!", "Riproduzione ripresa con successo.", color=COLOR_SUCCESS)
+                embed=_embed("▶️  Ripresa!", "Riproduzione ripresa con successo.", color=COLOR_SUCCESS),
+                delete_after=DEL_SHORT,
             )
         else:
             await interaction.response.send_message(
@@ -472,7 +495,7 @@ class Music(commands.Cog):
                 inline=False,
             )
 
-        await interaction.response.send_message(embed=_footer(e))
+        await interaction.response.send_message(embed=_footer(e), delete_after=DEL_LONG)
 
     @app_commands.command(name="nowplaying", description="Mostra il brano attualmente in riproduzione.")
     async def nowplaying(self, interaction: discord.Interaction):
@@ -483,7 +506,7 @@ class Music(commands.Cog):
                 ephemeral=True,
             )
             return
-        await interaction.response.send_message(embed=_song_embed(state.current))
+        await interaction.response.send_message(embed=_song_embed(state.current), delete_after=DEL_LONG)
 
     @app_commands.command(name="volume", description="Imposta il volume della riproduzione (0–100).")
     @app_commands.describe(livello="Volume da impostare (0 = muto, 100 = massimo)")
@@ -494,7 +517,8 @@ class Music(commands.Cog):
         emoji = "🔇" if livello == 0 else ("🔉" if livello < 50 else "🔊")
         await interaction.response.send_message(
             embed=_embed(f"{emoji}  Volume impostato",
-                f"{bar}  **{livello}%**\n*Attivo dal prossimo brano.*", color=COLOR_INFO)
+                f"{bar}  **{livello}%**\n*Attivo dal prossimo brano.*", color=COLOR_INFO),
+            delete_after=DEL_MEDIUM,
         )
 
     @app_commands.command(name="volup", description="Aumenta il volume del 10%.")
@@ -506,7 +530,8 @@ class Music(commands.Cog):
         emoji = "🔉" if new_vol < 50 else "🔊"
         await interaction.response.send_message(
             embed=_embed(f"{emoji}  Volume aumentato",
-                f"{bar}  **{new_vol}%**\n*Attivo dal prossimo brano.*", color=COLOR_INFO)
+                f"{bar}  **{new_vol}%**\n*Attivo dal prossimo brano.*", color=COLOR_INFO),
+            delete_after=DEL_MEDIUM,
         )
 
     @app_commands.command(name="voldown", description="Abbassa il volume del 10%.")
@@ -518,7 +543,8 @@ class Music(commands.Cog):
         emoji = "🔇" if new_vol == 0 else ("🔉" if new_vol < 50 else "🔊")
         await interaction.response.send_message(
             embed=_embed(f"{emoji}  Volume abbassato",
-                f"{bar}  **{new_vol}%**\n*Attivo dal prossimo brano.*", color=COLOR_INFO)
+                f"{bar}  **{new_vol}%**\n*Attivo dal prossimo brano.*", color=COLOR_INFO),
+            delete_after=DEL_MEDIUM,
         )
 
     @app_commands.command(name="shuffle", description="Mescola casualmente i brani in coda.")
@@ -535,7 +561,8 @@ class Music(commands.Cog):
         state.queue = deque(q_list)
         await interaction.response.send_message(
             embed=_embed("🔀  Coda mischiata!", f"**{len(state.queue)}** brani mescolati casualmente. 🎲",
-                color=COLOR_ACTION)
+                color=COLOR_ACTION),
+            delete_after=DEL_SHORT,
         )
 
     @app_commands.command(name="clear", description="Rimuove tutti i brani dalla coda (il brano corrente continua).")
@@ -543,7 +570,8 @@ class Music(commands.Cog):
         state = self._state(interaction.guild)
         state.queue.clear()
         await interaction.response.send_message(
-            embed=_embed("🗑️  Coda svuotata", "Tutti i brani in coda sono stati rimossi.", color=COLOR_ACTION)
+            embed=_embed("🗑️  Coda svuotata", "Tutti i brani in coda sono stati rimossi.", color=COLOR_ACTION),
+            delete_after=DEL_SHORT,
         )
 
     @app_commands.command(name="loop", description="Attiva o disattiva la ripetizione del brano corrente.")
@@ -552,11 +580,13 @@ class Music(commands.Cog):
         state.loop = not state.loop
         if state.loop:
             await interaction.response.send_message(
-                embed=_embed("🔁  Loop attivato", "Il brano corrente verrà ripetuto all'infinito.", color=COLOR_SUCCESS)
+                embed=_embed("🔁  Loop attivato", "Il brano corrente verrà ripetuto all'infinito.", color=COLOR_SUCCESS),
+                delete_after=DEL_SHORT,
             )
         else:
             await interaction.response.send_message(
-                embed=_embed("➡️  Loop disattivato", "La coda riprenderà normalmente.", color=COLOR_ACTION)
+                embed=_embed("➡️  Loop disattivato", "La coda riprenderà normalmente.", color=COLOR_ACTION),
+                delete_after=DEL_SHORT,
             )
 
     @app_commands.command(name="leave", description="Disconnette il bot dal canale vocale.")
@@ -570,7 +600,8 @@ class Music(commands.Cog):
             state.voice_client = None
             log.info(f"[{interaction.guild.name}] Disconnesso da {interaction.user.display_name}")
             await interaction.response.send_message(
-                embed=_embed("👋  Ciao ciao!", "Disconnesso dal canale vocale. A presto! 🎵", color=COLOR_INFO)
+                embed=_embed("👋  Ciao ciao!", "Disconnesso dal canale vocale. A presto! 🎵", color=COLOR_INFO),
+                delete_after=DEL_SHORT,
             )
         else:
             await interaction.response.send_message(
