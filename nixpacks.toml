@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["ffmpeg", "python312"]
+nixPkgs = ["ffmpeg", "libopus"]
 
 [variables]
 NIXPACKS_PYTHON_VERSION = "3.12"
