@@ -274,24 +274,8 @@ def create_app(bot) -> FastAPI:
         body = await request.json()
         vol = max(0, min(100, int(body.get("volume", 50))))
         st  = _state(guild_id)
-        if not st:
-            return {"ok": False}
-        st.volume = vol / 100.0
-        # FFmpegOpusAudio non supporta volume in real-time: riavvia lo stream
-        # con il nuovo filtro -filter:a volume=X per applicare subito il cambio.
-        if st.is_active() and st.current:
-            cog = _cog()
-            guild = bot.get_guild(guild_id)
-            channel = st.voice_client.channel.guild.get_channel(
-                st.voice_client.channel.id
-            )
-            # Cerca il primo canale testuale dove inviare l'embed
-            text_channel = next(
-                (c for c in guild.text_channels if c.permissions_for(guild.me).send_messages),
-                None,
-            )
-            if text_channel and cog:
-                st.voice_client.stop()  # il callback _play_next riavvia con il volume aggiornato
+        if st:
+            st.volume = vol / 100.0
         return {"ok": True, "volume": vol}
 
     @app.post("/api/guild/{guild_id}/loop")
