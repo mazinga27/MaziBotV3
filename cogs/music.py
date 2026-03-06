@@ -267,21 +267,35 @@ class Music(commands.Cog):
         )
 
     async def _stream(self, ctx: commands.Context, state: GuildState, song: Song):
-        """Avvia effettivamente il playback di un Song."""
+        """Avvia il playback di un Song, ri-estraendo sempre un URL fresco da YouTube."""
         if state.voice_client is None or not state.voice_client.is_connected():
             return
 
         try:
-            source = discord.FFmpegPCMAudio(song.url, **FFMPEG_OPTIONS)
+            # ── Re-estrazione URL fresco ─────────────────────────────────────
+            # Gli URL di YouTube scadono in pochi minuti. Ri-estraiamo sempre
+            # un URL fresco da webpage_url prima di avviare FFmpeg.
+            source_url = song.url
+            if song.webpage_url:
+                loop = asyncio.get_event_loop()
+                fresh_info = await loop.run_in_executor(None, _extract_info, song.webpage_url)
+                if fresh_info:
+                    fresh_url = fresh_info.get("url", "")
+                    if fresh_url:
+                        source_url = fresh_url
+                        log.info(f"URL aggiornato per: {song.title}")
+
+            source = discord.FFmpegPCMAudio(source_url, **FFMPEG_OPTIONS)
             volume_source = discord.PCMVolumeTransformer(source, volume=state.volume)
             state.voice_client.play(
                 volume_source,
-                after=lambda e: self._play_next(ctx, state) if not e else log.error(f"Errore playback: {e}"),
+                after=lambda e: self._play_next(ctx, state) if not e else log.error(f"Errore playback: {type(e).__name__}: {e}"),
             )
             await ctx.send(embed=_song_embed(song))
         except Exception as e:
-            log.error(f"Errore stream: {e}")
-            await ctx.send(embed=_embed("❌ Errore", f"Impossibile riprodurre il brano: `{e}`", color=0xe74c3c))
+            log.error(f"Errore stream ({type(e).__name__}): {e}", exc_info=True)
+            msg = str(e) if str(e) else type(e).__name__
+            await ctx.send(embed=_embed("❌  Errore stream", f"`{msg}`\nRiprova con `!play`.", color=COLOR_ERROR))
             self._play_next(ctx, state)
 
     # ═══════════════════════════════════════════════════════════════════════════

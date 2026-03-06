@@ -18,7 +18,7 @@ if not DISCORD_TOKEN:
 # Impostazioni audio
 FFMPEG_OPTIONS: dict = {
     "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn -filter:a volume=1.0",
+    "options": "-vn",
 }
 
 YDL_OPTIONS: dict = {
@@ -27,13 +27,6 @@ YDL_OPTIONS: dict = {
     "quiet": True,
     "no_warnings": True,
     "default_search": "ytsearch",
-    "source_address": "0.0.0.0",
-    "extract_flat": False,
-    "skip_download": True,
-    "postprocessors": [{
-        "key": "FFmpegExtractAudio",
-        "preferredcodec": "opus",
-    }],
 }
 
 YDL_OPTIONS_FLAT: dict = {
