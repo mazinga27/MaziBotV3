@@ -167,6 +167,30 @@ def _footer(embed: discord.Embed, requester: discord.Member = None) -> discord.E
     return embed
 
 
+async def _auto_delete(msg: discord.Message, delay: float) -> None:
+    """Cancella un messaggio dopo 'delay' secondi, ignorando errori di permesso."""
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except (discord.NotFound, discord.Forbidden):
+        pass
+
+
+async def _followup_send(
+    interaction: discord.Interaction,
+    embed: discord.Embed,
+    delete_after: float | None = None,
+    ephemeral: bool = False,
+) -> discord.Message:
+    """Invia un followup e schedula la cancellazione automatica.
+    Necessario perché Webhook.send() non supporta delete_after nativamente.
+    """
+    msg = await interaction.followup.send(embed=embed, wait=True, ephemeral=ephemeral)
+    if delete_after is not None and not ephemeral:
+        asyncio.get_event_loop().create_task(_auto_delete(msg, delete_after))
+    return msg
+
+
 def _embed(title: str, description: str = "", color: int = COLOR_INFO) -> discord.Embed:
     return _footer(discord.Embed(title=title, description=description, color=color))
 
@@ -292,7 +316,7 @@ class Music(commands.Cog):
         info = await asyncio.get_event_loop().run_in_executor(None, _extract_info, query)
 
         if info is None:
-            await interaction.followup.send(
+            await _followup_send(interaction,
                 embed=_embed("❌  Non trovato", f"Nessun risultato per: `{query}`", color=COLOR_ERROR),
                 delete_after=DEL_MEDIUM,
             )
@@ -308,10 +332,10 @@ class Music(commands.Cog):
             e.add_field(name="📋  Posizione", value=f"`#{len(state.queue)}`",  inline=True)
             if song.thumbnail:
                 e.set_thumbnail(url=song.thumbnail)
-            await interaction.followup.send(embed=_footer(e, interaction.user), delete_after=DEL_MEDIUM)
+            await _followup_send(interaction, embed=_footer(e, interaction.user), delete_after=DEL_MEDIUM)
         else:
             state.current = song
-            await interaction.followup.send(
+            await _followup_send(interaction,
                 embed=_embed("🔍  Trovato!", f"Avvio **{song.title}**…", color=COLOR_INFO),
                 delete_after=DEL_SHORT,
             )
@@ -327,7 +351,7 @@ class Music(commands.Cog):
             )
 
         if not data or not data.get("entries"):
-            await interaction.followup.send(
+            await _followup_send(interaction,
                 embed=_embed("❌  Nessun risultato", f"Nessun brano trovato per: `{query}`", color=COLOR_ERROR),
                 delete_after=DEL_MEDIUM,
             )
@@ -341,7 +365,7 @@ class Music(commands.Cog):
         e = discord.Embed(title="🔍  Risultati ricerca", description=lines, color=COLOR_INFO)
         e.set_footer(text="Usa /play <testo> per riprodurre  •  MaziBot 🎵")
         e.timestamp = discord.utils.utcnow()
-        await interaction.followup.send(embed=e, delete_after=DEL_LONG)
+        await _followup_send(interaction, embed=e, delete_after=DEL_LONG)
 
     @app_commands.command(name="spotify", description="Carica una playlist, album o singolo da Spotify.")
     @app_commands.describe(url="URL Spotify di playlist, album o singolo")
@@ -350,7 +374,7 @@ class Music(commands.Cog):
         if not await self._ensure_voice(interaction):
             return
         if not SPOTIFY_CLIENT_ID or not SPOTIFY_CLIENT_SECRET:
-            await interaction.followup.send(
+            await _followup_send(interaction,
                 embed=_embed("❌  Spotify non configurato",
                     "Aggiungi `SPOTIFY_CLIENT_ID` e `SPOTIFY_CLIENT_SECRET` nel file `.env`.", color=COLOR_ERROR),
                 delete_after=DEL_MEDIUM,
@@ -359,7 +383,7 @@ class Music(commands.Cog):
 
         track_names = await asyncio.get_event_loop().run_in_executor(None, _get_spotify_tracks, url)
         if not track_names:
-            await interaction.followup.send(
+            await _followup_send(interaction,
                 embed=_embed("❌  Errore Spotify",
                     "Impossibile leggere l'URL. Controlla che sia una playlist/album/traccia pubblica.", color=COLOR_ERROR),
                 delete_after=DEL_MEDIUM,
@@ -391,10 +415,8 @@ class Music(commands.Cog):
         log.info(f"[{interaction.guild.name}] Spotify: {added}/{len(track_names)} brani caricati")
         done = discord.Embed(description=f"**{added}** brani aggiunti in coda con successo!", color=COLOR_SUCCESS)
         done.set_author(name="✅  Playlist Spotify caricata")
-        # Modifica il messaggio di caricamento con il risultato e poi lo elimina
         await loading_msg.edit(embed=_footer(done, interaction.user))
-        await asyncio.sleep(DEL_LONG)
-        await loading_msg.delete()
+        asyncio.get_event_loop().create_task(_auto_delete(loading_msg, DEL_LONG))
 
     @app_commands.command(name="skip", description="Salta il brano corrente e passa al prossimo.")
     async def skip(self, interaction: discord.Interaction):
