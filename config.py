@@ -1,26 +1,20 @@
 """
-config.py — Gestione variabili d'ambiente per MaziBot
+config.py — Configurazione e costanti di MaziBot
 """
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DISCORD_TOKEN: str = os.getenv("DISCORD_TOKEN", "")
-SPOTIFY_CLIENT_ID: str = os.getenv("SPOTIFY_CLIENT_ID", "")
+# ── Token e credenziali ───────────────────────────────────────────────────────
+DISCORD_TOKEN: str         = os.getenv("DISCORD_TOKEN", "")
+SPOTIFY_CLIENT_ID: str     = os.getenv("SPOTIFY_CLIENT_ID", "")
 SPOTIFY_CLIENT_SECRET: str = os.getenv("SPOTIFY_CLIENT_SECRET", "")
-BOT_PREFIX: str = os.getenv("BOT_PREFIX", "!")
 
-# Validazione token obbligatori
 if not DISCORD_TOKEN:
-    raise ValueError("❌ DISCORD_TOKEN non trovato nel file .env!")
+    raise ValueError("DISCORD_TOKEN mancante nel file .env!")
 
-# Impostazioni audio
-FFMPEG_OPTIONS: dict = {
-    "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
-    "options": "-vn",
-}
-
+# ── Opzioni yt-dlp ────────────────────────────────────────────────────────────
 YDL_OPTIONS: dict = {
     "format": "bestaudio/best",
     "noplaylist": True,
@@ -29,9 +23,7 @@ YDL_OPTIONS: dict = {
     "default_search": "ytsearch",
 }
 
-YDL_OPTIONS_FLAT: dict = {
-    "format": "bestaudio/best",
-    "noplaylist": False,
+YDL_FLAT_OPTIONS: dict = {
     "quiet": True,
     "no_warnings": True,
     "extract_flat": True,

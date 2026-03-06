@@ -1,19 +1,20 @@
 """
 bot.py — Entry point di MaziBot 🎵
 """
-import discord
-from discord.ext import commands
-import logging
 import asyncio
+import logging
 import sys
-import static_ffmpeg
 
-# ── FFmpeg — aggiunge automaticamente il binario al PATH
+import discord
+import static_ffmpeg
+from discord.ext import commands
+
+from config import DISCORD_TOKEN
+
+# ── FFmpeg: aggiunge il binario statico al PATH ───────────────────────────────
 static_ffmpeg.add_paths()
 
-from config import DISCORD_TOKEN, BOT_PREFIX
-
-# ── Logging ──────────────────────────────────────────────────────────────────
+# ── Logging ───────────────────────────────────────────────────────────────────
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -21,50 +22,48 @@ logging.basicConfig(
 )
 log = logging.getLogger("MaziBot")
 
-# ── Intents ──────────────────────────────────────────────────────────────────
+# ── Intents ───────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
-intents.message_content = True
 intents.voice_states = True
+# message_content non è più necessario con gli slash commands
 
 
 # ── Bot ───────────────────────────────────────────────────────────────────────
 class MaziBot(commands.Bot):
     def __init__(self):
         super().__init__(
-            command_prefix=BOT_PREFIX,
+            command_prefix="§",         # Prefix inutilizzato (solo slash commands)
             intents=intents,
-            help_command=None,          # Usiamo il nostro !help personalizzato
+            help_command=None,
             description="🎵 MaziBot — Il tuo DJ personale su Discord",
         )
 
     async def setup_hook(self):
-        """Carica i cog all'avvio."""
+        """Carica i cog e sincronizza gli slash commands con Discord."""
         await self.load_extension("cogs.music")
-        log.info("✅ Cog 'music' caricato")
+        log.info("Cog 'music' caricato")
+
+        # Sincronizza gli slash commands globalmente
+        synced = await self.tree.sync()
+        log.info(f"Slash commands sincronizzati: {len(synced)} comandi")
 
     async def on_ready(self):
-        opus_status = "✅ opus caricato" if discord.opus.is_loaded() else "❌ opus NON caricato"
-        log.info(f"🤖 MaziBot connesso come {self.user} (ID: {self.user.id}) | {opus_status}")
+        log.info(f"Bot online: {self.user} (ID: {self.user.id})")
+        log.info(f"Server connessi: {len(self.guilds)}")
         await self.change_presence(
-            activity=discord.Game(name="MaziOnTop 🎵")
+            activity=discord.Activity(
+                type=discord.ActivityType.listening,
+                name="MaziOnTop 🎵",
+            )
         )
 
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         if isinstance(error, commands.CommandNotFound):
             return
-        if isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send(
-                embed=discord.Embed(
-                    description=f"❌ Mancano degli argomenti. Usa `{BOT_PREFIX}help` per vedere i comandi.",
-                    color=discord.Color.red(),
-                )
-            )
-            return
-        # Logga errori non gestiti
-        log.error(f"Errore nel comando '{ctx.command}': {error}", exc_info=error)
+        log.error(f"Errore comando '{ctx.command}': {error}", exc_info=error)
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── Avvio ─────────────────────────────────────────────────────────────────────
 async def main():
     async with MaziBot() as bot:
         await bot.start(DISCORD_TOKEN)
