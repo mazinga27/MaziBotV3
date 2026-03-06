@@ -1,15 +1,19 @@
 """
 bot.py — Entry point di MaziBot 🎵
+Avvia il bot Discord e il web server (dashboard) nello stesso processo asyncio.
 """
 import asyncio
 import logging
+import os
 import sys
 
 import discord
 import static_ffmpeg
+import uvicorn
 from discord.ext import commands
 
 from config import DISCORD_TOKEN
+from webapp.app import create_app
 
 # ── FFmpeg: aggiunge il binario statico al PATH ───────────────────────────────
 static_ffmpeg.add_paths()
@@ -25,25 +29,21 @@ log = logging.getLogger("MaziBot")
 # ── Intents ───────────────────────────────────────────────────────────────────
 intents = discord.Intents.default()
 intents.voice_states = True
-# message_content non è più necessario con gli slash commands
 
 
 # ── Bot ───────────────────────────────────────────────────────────────────────
 class MaziBot(commands.Bot):
     def __init__(self):
         super().__init__(
-            command_prefix="§",         # Prefix inutilizzato (solo slash commands)
+            command_prefix="§",         # Prefix inutilizzato: si usano slash commands
             intents=intents,
             help_command=None,
             description="🎵 MaziBot — Il tuo DJ personale su Discord",
         )
 
     async def setup_hook(self):
-        """Carica i cog e sincronizza gli slash commands con Discord."""
         await self.load_extension("cogs.music")
         log.info("Cog 'music' caricato")
-
-        # Sincronizza gli slash commands globalmente
         synced = await self.tree.sync()
         log.info(f"Slash commands sincronizzati: {len(synced)} comandi")
 
@@ -65,8 +65,26 @@ class MaziBot(commands.Bot):
 
 # ── Avvio ─────────────────────────────────────────────────────────────────────
 async def main():
-    async with MaziBot() as bot:
-        await bot.start(DISCORD_TOKEN)
+    bot = MaziBot()
+
+    # FastAPI web server (dashboard)
+    web_app = create_app(bot)
+    port = int(os.getenv("PORT", 8080))
+    config = uvicorn.Config(
+        web_app,
+        host="0.0.0.0",
+        port=port,
+        log_level="warning",    # evita log duplicati con il logger del bot
+    )
+    server = uvicorn.Server(config)
+    log.info(f"Dashboard web avviata su http://0.0.0.0:{port}")
+
+    # Bot Discord e web server girano nello stesso loop asyncio
+    async with bot:
+        await asyncio.gather(
+            bot.start(DISCORD_TOKEN),
+            server.serve(),
+        )
 
 
 if __name__ == "__main__":

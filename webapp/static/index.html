@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MaziBot Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* ── Reset & Base ──────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0d0d1a;
+    --surface:  #13132b;
+    --card:     #1a1a35;
+    --border:   #2a2a50;
+    --accent:   #5865f2;
+    --accent2:  #7983f5;
+    --green:    #1db954;
+    --red:      #ed4245;
+    --orange:   #f5a623;
+    --text:     #e8e8f0;
+    --muted:    #8888aa;
+    --radius:   14px;
+    --shadow:   0 8px 32px rgba(0,0,0,.45);
+  }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Scrollbar ─────────────────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── Login screen ──────────────────────────────────────────────────────── */
+  #login-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    gap: 24px;
+    background: radial-gradient(ellipse at 50% 0%, #1a1a50 0%, var(--bg) 70%);
+  }
+  #login-screen .logo {
+    font-size: 64px;
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50%      { transform: translateY(-10px); }
+  }
+  #login-screen h1 { font-size: 2.4rem; font-weight: 700; letter-spacing: -1px; }
+  #login-screen p  { color: var(--muted); font-size: 1.05rem; }
+  .btn-discord {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--accent);
+    color: #fff;
+    padding: 14px 32px;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 1rem;
+    transition: all .2s;
+    box-shadow: 0 4px 20px rgba(88,101,242,.4);
+  }
+  .btn-discord:hover { background: var(--accent2); transform: translateY(-2px); box-shadow: 0 8px 28px rgba(88,101,242,.5); }
+
+  /* ── Sidebar ───────────────────────────────────────────────────────────── */
+  #sidebar {
+    width: 72px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    gap: 8px;
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 100;
+    transition: width .25s;
+    overflow: hidden;
+  }
+  #sidebar:hover { width: 220px; }
+  .sidebar-logo {
+    font-size: 28px;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-bottom: 12px;
+  }
+  .sidebar-divider { width: 40px; height: 1px; background: var(--border); margin: 4px 0; flex-shrink: 0; }
+  .guild-btn {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    border: none;
+    cursor: pointer;
+    overflow: hidden;
+    flex-shrink: 0;
+    transition: border-radius .2s, transform .15s;
+    background: var(--card);
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text);
+    position: relative;
+  }
+  .guild-btn img { width: 100%; height: 100%; object-fit: cover; }
+  .guild-btn:hover, .guild-btn.active { border-radius: 14px; transform: scale(1.05); }
+  .guild-btn.active::after {
+    content: '';
+    position: absolute;
+    left: -6px; top: 50%; transform: translateY(-50%);
+    width: 4px; height: 24px;
+    background: #fff;
+    border-radius: 0 2px 2px 0;
+  }
+  .guild-label {
+    position: absolute;
+    left: 60px;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity .2s;
+    pointer-events: none;
+  }
+  #sidebar:hover .guild-label { opacity: 1; }
+  .guild-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 0 14px;
+  }
+
+  /* ── Main area ─────────────────────────────────────────────────────────── */
+  #main {
+    margin-left: 72px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ── Topbar ────────────────────────────────────────────────────────────── */
+  #topbar {
+    height: 60px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  #topbar .guild-name { font-weight: 600; font-size: 1.05rem; flex: 1; }
+  #topbar .user-info {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 13px; color: var(--muted);
+  }
+  #topbar .user-info img {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+  }
+  .btn-logout {
+    padding: 6px 14px; border-radius: 8px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer; font-size: 12px;
+    transition: all .15s;
+  }
+  .btn-logout:hover { background: var(--red); color: #fff; border-color: var(--red); }
+
+  /* ── Content ───────────────────────────────────────────────────────────── */
+  #content { flex: 1; padding: 28px; display: flex; flex-direction: column; gap: 20px; }
+
+  /* ── Empty state ───────────────────────────────────────────────────────── */
+  #empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--muted);
+  }
+  #empty-state .icon { font-size: 56px; opacity: .5; }
+
+  /* ── Now Playing card ──────────────────────────────────────────────────── */
+  #now-playing {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    display: flex;
+    gap: 0;
+    box-shadow: var(--shadow);
+    position: relative;
+  }
+  #np-bg {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    filter: blur(60px) brightness(.35);
+    transform: scale(1.1);
+    z-index: 0;
+  }
+  .np-inner {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 24px 28px;
+    width: 100%;
+  }
+  #np-thumb {
+    width: 96px; height: 96px;
+    border-radius: 10px;
+    object-fit: cover;
+    box-shadow: 0 4px 20px rgba(0,0,0,.5);
+    flex-shrink: 0;
+  }
+  .np-info { flex: 1; min-width: 0; }
+  .np-label { font-size: 11px; font-weight: 600; color: var(--green); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; }
+  #np-title {
+    font-size: 1.35rem; font-weight: 700;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-decoration: none; color: var(--text);
+  }
+  #np-title:hover { color: var(--accent2); }
+  #np-meta { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  #np-duration { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: auto; flex-shrink: 0; }
+
+  /* ── Controls ──────────────────────────────────────────────────────────── */
+  #controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .ctrl-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--card);
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .ctrl-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.3); }
+  .ctrl-btn.green  { background: var(--green); border-color: var(--green); color: #fff; }
+  .ctrl-btn.red    { background: var(--red);   border-color: var(--red);   color: #fff; }
+  .ctrl-btn.orange { background: var(--orange); border-color: var(--orange); color: #fff; }
+  .ctrl-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  /* ── Volume slider ─────────────────────────────────────────────────────── */
+  .volume-wrap {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 16px;
+    flex: 1; min-width: 200px; max-width: 320px;
+  }
+  .volume-label { font-size: 13px; font-weight: 600; flex-shrink: 0; }
+  #volume-slider {
+    -webkit-appearance: none; appearance: none;
+    flex: 1; height: 4px; border-radius: 2px;
+    background: var(--border); outline: none; cursor: pointer;
+  }
+  #volume-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: var(--accent); cursor: pointer;
+    transition: transform .1s;
+  }
+  #volume-slider::-webkit-slider-thumb:hover { transform: scale(1.2); }
+  #volume-pct { font-size: 13px; font-weight: 600; color: var(--muted); width: 36px; text-align: right; }
+
+  /* ── Queue ─────────────────────────────────────────────────────────────── */
+  #queue-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .card-header {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    font-weight: 600; font-size: .95rem;
+  }
+  .badge {
+    background: var(--accent);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: auto;
+  }
+  #queue-list { max-height: 360px; overflow-y: auto; }
+  .queue-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    transition: background .15s;
+  }
+  .queue-item:last-child { border-bottom: none; }
+  .queue-item:hover { background: rgba(255,255,255,.04); }
+  .q-num { font-size: 12px; color: var(--muted); width: 24px; text-align: center; flex-shrink: 0; font-weight: 600; }
+  .q-thumb {
+    width: 40px; height: 40px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: var(--border);
+  }
+  .q-info { flex: 1; min-width: 0; }
+  .q-title {
+    font-size: 13px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    text-decoration: none; color: var(--text);
+  }
+  .q-title:hover { color: var(--accent2); }
+  .q-dur { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .q-remove {
+    width: 28px; height: 28px;
+    border-radius: 6px; border: none;
+    background: transparent; color: var(--muted);
+    cursor: pointer; font-size: 16px;
+    display: grid; place-items: center;
+    transition: all .15s; flex-shrink: 0;
+  }
+  .q-remove:hover { background: var(--red); color: #fff; }
+  .queue-empty { padding: 32px; text-align: center; color: var(--muted); font-size: 14px; }
+
+  /* ── Status dot ────────────────────────────────────────────────────────── */
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.playing { background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 1.5s infinite; }
+  .dot.paused  { background: var(--orange); }
+  .dot.idle    { background: var(--muted); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+  /* ── Utility ───────────────────────────────────────────────────────────── */
+  .hidden { display: none !important; }
+  .section-title { font-size: .8rem; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .8px; }
+</style>
+</head>
+<body>
+
+<!-- ── Login screen ─────────────────────────────────────────────────── -->
+<div id="login-screen" class="hidden">
+  <div class="logo">🎵</div>
+  <h1>MaziBot Dashboard</h1>
+  <p>Accedi con il tuo account Discord per controllare il bot</p>
+  <a href="/auth/login" class="btn-discord">
+    <svg width="20" height="20" viewBox="0 0 71 55" fill="none"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.4.7a40.7 40.7 0 0 0-1.8 3.7 54.2 54.2 0 0 0-16.2 0A40.7 40.7 0 0 0 25.6.7 58.4 58.4 0 0 0 10.9 4.9C1.6 18.9-1 32.5.3 46a58.8 58.8 0 0 0 17.9 9.1 44.2 44.2 0 0 0 3.8-6.2 38.3 38.3 0 0 1-6-2.9l1.5-1.1a41.9 41.9 0 0 0 35.9 0l1.5 1.1a38.4 38.4 0 0 1-6 2.9 44.2 44.2 0 0 0 3.8 6.2A58.7 58.7 0 0 0 70.7 46C72.3 30.3 68 16.8 60.1 4.9ZM23.7 37.5c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.5 0 6.4 3.2 6.3 7.2 0 4-2.8 7.2-6.3 7.2Zm23.6 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.5 0 6.4 3.2 6.3 7.2 0 4-2.8 7.2-6.3 7.2Z" fill="#fff"/></svg>
+    Accedi con Discord
+  </a>
+</div>
+
+<!-- ── App ───────────────────────────────────────────────────────────── -->
+<div id="app" class="hidden" style="display:flex;width:100%;min-height:100vh;">
+  <!-- Sidebar -->
+  <nav id="sidebar">
+    <div class="sidebar-logo">🎵</div>
+    <div class="sidebar-divider"></div>
+    <div id="guild-list" style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;width:100%;"></div>
+  </nav>
+
+  <!-- Main -->
+  <div id="main">
+    <!-- Topbar -->
+    <header id="topbar">
+      <span id="active-guild-name" class="guild-name">Seleziona un server</span>
+      <div class="user-info">
+        <img id="user-avatar" src="" alt="avatar" />
+        <span id="user-name"></span>
+        <button class="btn-logout" onclick="location.href='/auth/logout'">Esci</button>
+      </div>
+    </header>
+
+    <!-- Content -->
+    <div id="content">
+      <!-- Empty -->
+      <div id="empty-state">
+        <div class="icon">👈</div>
+        <p>Seleziona un server dalla barra laterale</p>
+      </div>
+
+      <!-- Player section -->
+      <div id="player-section" class="hidden" style="display:flex;flex-direction:column;gap:20px;">
+
+        <!-- Now Playing -->
+        <div id="now-playing">
+          <div id="np-bg"></div>
+          <div class="np-inner">
+            <img id="np-thumb" src="" alt="thumbnail" />
+            <div class="np-info">
+              <div class="np-label" id="np-status-label">▶ In riproduzione</div>
+              <a id="np-title" href="#" target="_blank">—</a>
+              <div id="np-meta" class="np-meta"></div>
+            </div>
+            <span id="np-duration"></span>
+          </div>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls">
+          <button class="ctrl-btn green" id="btn-pause" onclick="ctrlPause()">⏸ Pausa</button>
+          <button class="ctrl-btn orange" id="btn-skip" onclick="ctrlSkip()">⏭ Skip</button>
+          <button class="ctrl-btn red" id="btn-stop" onclick="ctrlStop()">⏹ Stop</button>
+          <button class="ctrl-btn" id="btn-loop" onclick="ctrlLoop()">🔁 Loop</button>
+          <div class="volume-wrap">
+            <span class="volume-label">🔊</span>
+            <input type="range" id="volume-slider" min="0" max="100" value="50"
+                   oninput="updateVolPct(this.value)" onchange="ctrlVolume(this.value)" />
+            <span id="volume-pct">50%</span>
+          </div>
+        </div>
+
+        <!-- Queue -->
+        <div id="queue-card">
+          <div class="card-header">
+            <div class="dot idle" id="status-dot"></div>
+            🎶 Coda di riproduzione
+            <span class="badge" id="queue-badge">0</span>
+          </div>
+          <div id="queue-list"></div>
+        </div>
+
+      </div><!-- /player-section -->
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ── Stato ─────────────────────────────────────────────────────────────────
+let activeGuildId = null;
+let pollTimer     = null;
+let userData      = null;
+let volDebounce   = null;
+
+// ── Avvio ─────────────────────────────────────────────────────────────────
+async function init() {
+  const res = await fetch('/api/me').catch(() => null);
+  if (!res || res.status === 401) {
+    document.getElementById('login-screen').classList.remove('hidden');
+    return;
+  }
+  const data = await res.json();
+  userData = data.user;
+
+  // Aggiorna UI utente
+  const av = document.getElementById('user-avatar');
+  av.src = data.user.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png';
+  document.getElementById('user-name').textContent = data.user.username;
+
+  // Popola lista guild
+  const list = document.getElementById('guild-list');
+  list.innerHTML = '';
+  data.guilds.forEach(g => {
+    const item = document.createElement('div');
+    item.className = 'guild-item';
+    item.innerHTML = `
+      <button class="guild-btn" onclick="selectGuild('${g.id}', '${escHtml(g.name)}')" title="${escHtml(g.name)}" id="guild-${g.id}">
+        ${g.icon ? `<img src="${g.icon}" alt="${escHtml(g.name)}" />` : initials(g.name)}
+      </button>
+      <span class="guild-label">${escHtml(g.name)}</span>`;
+    list.appendChild(item);
+  });
+
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('app').style.display = 'flex';
+
+  // Seleziona primo server automaticamente
+  if (data.guilds.length > 0) selectGuild(data.guilds[0].id, data.guilds[0].name);
+}
+
+// ── Selezione server ───────────────────────────────────────────────────────
+function selectGuild(id, name) {
+  activeGuildId = id;
+  document.getElementById('active-guild-name').textContent = name;
+  document.querySelectorAll('.guild-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById(`guild-${id}`);
+  if (btn) btn.classList.add('active');
+  document.getElementById('empty-state').classList.add('hidden');
+  document.getElementById('player-section').classList.remove('hidden');
+  document.getElementById('player-section').style.display = 'flex';
+  if (pollTimer) clearInterval(pollTimer);
+  pollState();
+  pollTimer = setInterval(pollState, 3000);
+}
+
+// ── Polling stato ──────────────────────────────────────────────────────────
+async function pollState() {
+  if (!activeGuildId) return;
+  const res = await fetch(`/api/guild/${activeGuildId}/state`).catch(() => null);
+  if (!res || !res.ok) return;
+  const s = await res.json();
+  renderState(s);
+}
+
+// ── Render stato ───────────────────────────────────────────────────────────
+function renderState(s) {
+  const np = s.current;
+  const dot = document.getElementById('status-dot');
+
+  if (np) {
+    // Copertina e sfondo blurred
+    document.getElementById('np-thumb').src = np.thumbnail || '';
+    document.getElementById('np-bg').style.backgroundImage = np.thumbnail ? `url(${np.thumbnail})` : 'none';
+    document.getElementById('np-title').textContent = np.title;
+    document.getElementById('np-title').href = np.webpage_url || '#';
+    document.getElementById('np-duration').textContent = np.duration;
+    document.getElementById('np-meta').textContent = np.requester ? `Richiesto da ${np.requester}` : '';
+    document.getElementById('np-status-label').textContent = s.paused ? '⏸ In pausa' : '▶ In riproduzione';
+
+    dot.className = 'dot ' + (s.paused ? 'paused' : 'playing');
+  } else {
+    document.getElementById('np-title').textContent = '— Niente in riproduzione —';
+    document.getElementById('np-thumb').src = '';
+    document.getElementById('np-bg').style.backgroundImage = 'none';
+    document.getElementById('np-duration').textContent = '';
+    document.getElementById('np-meta').textContent = '';
+    dot.className = 'dot idle';
+  }
+
+  // Pulsante pause/resume
+  const btnPause = document.getElementById('btn-pause');
+  if (s.paused) {
+    btnPause.textContent = '▶ Riprendi';
+    btnPause.onclick = ctrlResume;
+    btnPause.className = 'ctrl-btn green';
+  } else {
+    btnPause.textContent = '⏸ Pausa';
+    btnPause.onclick = ctrlPause;
+    btnPause.className = 'ctrl-btn green';
+  }
+
+  // Loop button
+  const btnLoop = document.getElementById('btn-loop');
+  btnLoop.className = 'ctrl-btn' + (s.loop ? ' active' : '');
+
+  // Volume (solo se non sta trascinando)
+  if (!document.getElementById('volume-slider').matches(':active')) {
+    document.getElementById('volume-slider').value = s.volume;
+    document.getElementById('volume-pct').textContent = s.volume + '%';
+  }
+
+  // Queue
+  document.getElementById('queue-badge').textContent = s.queue.length;
+  const list = document.getElementById('queue-list');
+  if (s.queue.length === 0) {
+    list.innerHTML = '<div class="queue-empty">🎵 La coda è vuota</div>';
+  } else {
+    list.innerHTML = s.queue.map((song, i) => `
+      <div class="queue-item">
+        <span class="q-num">${i + 1}</span>
+        <img class="q-thumb" src="${song.thumbnail || ''}" alt="" onerror="this.style.display='none'" />
+        <div class="q-info">
+          <a class="q-title" href="${song.webpage_url || '#'}" target="_blank" title="${escHtml(song.title)}">${escHtml(song.title)}</a>
+          <div class="q-dur">${song.duration}</div>
+        </div>
+        <button class="q-remove" onclick="ctrlRemove(${i})" title="Rimuovi">✕</button>
+      </div>`).join('');
+  }
+}
+
+// ── Comandi ────────────────────────────────────────────────────────────────
+async function ctrlPause()  { await api('POST', 'pause');  }
+async function ctrlResume() { await api('POST', 'resume'); }
+async function ctrlSkip()   { await api('POST', 'skip');   }
+async function ctrlStop()   { await api('POST', 'stop');   }
+async function ctrlLoop()   { await api('POST', 'loop');   }
+async function ctrlRemove(i){ await api('DELETE', `queue/${i}`); pollState(); }
+
+function updateVolPct(v) {
+  document.getElementById('volume-pct').textContent = v + '%';
+}
+
+function ctrlVolume(v) {
+  clearTimeout(volDebounce);
+  volDebounce = setTimeout(() => api('POST', 'volume', { volume: parseInt(v) }), 300);
+}
+
+async function api(method, endpoint, body) {
+  if (!activeGuildId) return;
+  const opts = { method, headers: { 'Content-Type': 'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`/api/guild/${activeGuildId}/${endpoint}`, opts).catch(() => null);
+  if (res && res.ok) await pollState();
+}
+
+// ── Utils ──────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function initials(name) {
+  return name.split(' ').slice(0,2).map(w => w[0]).join('').toUpperCase();
+}
+
+// ── Start! ─────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
