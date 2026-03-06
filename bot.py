@@ -7,9 +7,33 @@ import logging
 import asyncio
 import sys
 import static_ffmpeg
+import ctypes.util
 
-# ── FFmpeg — aggiunge automaticamente il binario al PATH (funziona su Railway e qualsiasi OS)
+# ── FFmpeg — aggiunge automaticamente il binario al PATH
 static_ffmpeg.add_paths()
+
+# ── Opus — caricamento manuale (su Railway/Nix la lib non è nel PATH standard)
+def _load_opus() -> bool:
+    if discord.opus.is_loaded():
+        return True
+    # Prova prima find_library (funziona su sistemi standard)
+    lib = ctypes.util.find_library("opus")
+    if lib:
+        try:
+            discord.opus.load_opus(lib)
+            return True
+        except Exception:
+            pass
+    # Fallback: nomi comuni su Linux / Nix
+    for name in ("libopus.so.0", "libopus.so.1", "libopus.so", "opus"):
+        try:
+            discord.opus.load_opus(name)
+            return True
+        except Exception:
+            continue
+    return False
+
+_opus_ok = _load_opus()
 
 from config import DISCORD_TOKEN, BOT_PREFIX
 
@@ -43,7 +67,8 @@ class MaziBot(commands.Bot):
         log.info("✅ Cog 'music' caricato")
 
     async def on_ready(self):
-        log.info(f"🤖 MaziBot connesso come {self.user} (ID: {self.user.id})")
+        opus_status = "✅ opus caricato" if discord.opus.is_loaded() else "❌ opus NON caricato"
+        log.info(f"🤖 MaziBot connesso come {self.user} (ID: {self.user.id}) | {opus_status}")
         await self.change_presence(
             activity=discord.Game(name="MaziOnTop 🎵")
         )
