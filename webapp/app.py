@@ -17,6 +17,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from itsdangerous import BadSignature, URLSafeSerializer
 
+import discord
+from cogs.music import _build_song, _extract_info, Song
+
 # ── Configurazione OAuth2 ─────────────────────────────────────────────────────
 DISCORD_CLIENT_ID     = os.getenv("DISCORD_CLIENT_ID", "")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
@@ -271,8 +274,24 @@ def create_app(bot) -> FastAPI:
         body = await request.json()
         vol = max(0, min(100, int(body.get("volume", 50))))
         st  = _state(guild_id)
-        if st:
-            st.volume = vol / 100.0
+        if not st:
+            return {"ok": False}
+        st.volume = vol / 100.0
+        # FFmpegOpusAudio non supporta volume in real-time: riavvia lo stream
+        # con il nuovo filtro -filter:a volume=X per applicare subito il cambio.
+        if st.is_active() and st.current:
+            cog = _cog()
+            guild = bot.get_guild(guild_id)
+            channel = st.voice_client.channel.guild.get_channel(
+                st.voice_client.channel.id
+            )
+            # Cerca il primo canale testuale dove inviare l'embed
+            text_channel = next(
+                (c for c in guild.text_channels if c.permissions_for(guild.me).send_messages),
+                None,
+            )
+            if text_channel and cog:
+                st.voice_client.stop()  # il callback _play_next riavvia con il volume aggiornato
         return {"ok": True, "volume": vol}
 
     @app.post("/api/guild/{guild_id}/loop")
@@ -296,5 +315,52 @@ def create_app(bot) -> FastAPI:
             st.queue = deque(q)
             return {"ok": True}
         return {"ok": False}
+
+    @app.post("/api/guild/{guild_id}/play")
+    async def api_play(guild_id: int, request: Request):
+        """Aggiunge un brano alla coda (o lo avvia) dalla dashboard.
+        Il bot deve essere già in un canale vocale.
+        """
+        session = _require_session(request)
+        _require_guild_access(guild_id, session, bot)
+        body = await request.json()
+        query = body.get("query", "").strip()
+        if not query:
+            raise HTTPException(400, "Campo 'query' mancante")
+
+        st = _state(guild_id)
+        if not st or not (st.voice_client and st.voice_client.is_connected()):
+            raise HTTPException(400, "Il bot non è in nessun canale vocale. Usa /play su Discord prima.")
+
+        # Cerca il brano in background
+        loop = asyncio.get_event_loop()
+        info = await loop.run_in_executor(None, _extract_info, query)
+        if info is None:
+            raise HTTPException(404, "Nessun brano trovato")
+
+        # Usa il membro Discord come requester se disponibile
+        guild    = bot.get_guild(guild_id)
+        requester = guild.get_member(int(session["user_id"]))
+        song = _build_song(info, requester)
+
+        cog = _cog()
+        # Trova un canale testuale per gli embed del bot
+        text_ch = next(
+            (c for c in guild.text_channels if c.permissions_for(guild.me).send_messages),
+            None,
+        )
+
+        if st.is_active():
+            # Aggiunge in coda
+            st.queue.append(song)
+            return {"ok": True, "action": "queued", "title": song.title, "position": len(st.queue)}
+        else:
+            # Avvia subito
+            st.current = song
+            if cog and text_ch:
+                asyncio.get_event_loop().create_task(
+                    cog._stream(text_ch, st, song, guild.name)
+                )
+            return {"ok": True, "action": "playing", "title": song.title}
 
     return app
