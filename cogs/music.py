@@ -267,14 +267,12 @@ class Music(commands.Cog):
         )
 
     async def _stream(self, ctx: commands.Context, state: GuildState, song: Song):
-        """Avvia il playback di un Song, ri-estraendo sempre un URL fresco da YouTube."""
+        """Avvia il playback con FFmpegOpusAudio (niente libopus di sistema richiesto)."""
         if state.voice_client is None or not state.voice_client.is_connected():
             return
 
         try:
             # ── Re-estrazione URL fresco ─────────────────────────────────────
-            # Gli URL di YouTube scadono in pochi minuti. Ri-estraiamo sempre
-            # un URL fresco da webpage_url prima di avviare FFmpeg.
             source_url = song.url
             if song.webpage_url:
                 loop = asyncio.get_event_loop()
@@ -285,10 +283,15 @@ class Music(commands.Cog):
                         source_url = fresh_url
                         log.info(f"URL aggiornato per: {song.title}")
 
-            source = discord.FFmpegPCMAudio(source_url, **FFMPEG_OPTIONS)
-            volume_source = discord.PCMVolumeTransformer(source, volume=state.volume)
+            # ── FFmpegOpusAudio: FFmpeg gestisce l'encoding Opus internamente
+            # Il volume è un filtro FFmpeg, niente libopus di sistema necessario
+            ffmpeg_opts = {
+                "before_options": "-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5",
+                "options": f"-vn -filter:a volume={state.volume:.2f}",
+            }
+            source = discord.FFmpegOpusAudio(source_url, **ffmpeg_opts)
             state.voice_client.play(
-                volume_source,
+                source,
                 after=lambda e: self._play_next(ctx, state) if not e else log.error(f"Errore playback: {type(e).__name__}: {e}"),
             )
             await ctx.send(embed=_song_embed(song))
