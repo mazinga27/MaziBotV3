@@ -80,21 +80,41 @@ class GuildState:
 
 # ── Helpers yt-dlp ────────────────────────────────────────────────────────────
 def _extract_info(query: str) -> Optional[dict]:
-    """Estrae info audio da YouTube (sincrono, va chiamato in executor)."""
+    """Estrae info audio da YouTube con retry su formati progressivamente più permissivi."""
     if not query.startswith("http"):
         query = f"ytsearch:{query}"
-    with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-        try:
-            data = ydl.extract_info(query, download=False)
-        except yt_dlp.utils.DownloadError as exc:
-            log.warning(f"yt-dlp: impossibile trovare '{query}' — {exc}")
-            return None
-    if data is None:
-        return None
-    if "entries" in data:
-        entries = [e for e in data["entries"] if e]
-        return entries[0] if entries else None
-    return data
+
+    # Catena di formati: dal più selettivo al più permissivo
+    format_fallbacks = [
+        None,           # usa YDL_OPTIONS invariato (bestaudio/best con estensioni)
+        "bestaudio/best",            # senza vincoli di estensione
+        "best",                      # qualsiasi formato disponibile
+    ]
+
+    for fmt in format_fallbacks:
+        opts = dict(YDL_OPTIONS)
+        if fmt is not None:
+            opts["format"] = fmt
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            try:
+                data = ydl.extract_info(query, download=False)
+                if data is None:
+                    return None
+                if "entries" in data:
+                    entries = [e for e in data["entries"] if e]
+                    return entries[0] if entries else None
+                return data
+            except yt_dlp.utils.DownloadError as exc:
+                err = str(exc)
+                if "Requested format is not available" in err:
+                    log.debug(f"yt-dlp formato '{opts.get('format')}' non disponibile, retry...")
+                    continue  # prova il formato successivo
+                # Errore non legato al formato — abbandona
+                log.warning(f"yt-dlp: impossibile trovare '{query}' — {exc}")
+                return None
+
+    log.warning(f"yt-dlp: nessun formato disponibile per '{query}'")
+    return None
 
 
 def _build_song(info: dict, requester: discord.Member) -> Song:
