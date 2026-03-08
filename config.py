@@ -37,7 +37,7 @@ if _COOKIES_B64:
 
 # ── Opzioni yt-dlp ────────────────────────────────────────────────────────────
 _ydl_base: dict = {
-    "format": "bestaudio/best",
+    "format": "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
