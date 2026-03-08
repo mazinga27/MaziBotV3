@@ -80,41 +80,44 @@ class GuildState:
 
 # ── Helpers yt-dlp ────────────────────────────────────────────────────────────
 def _extract_info(query: str) -> Optional[dict]:
-    """Estrae info audio da YouTube con retry su formati progressivamente più permissivi."""
-    if not query.startswith("http"):
-        query = f"ytsearch:{query}"
-
-    # Catena di formati: dal più selettivo al più permissivo
-    format_fallbacks = [
-        None,           # usa YDL_OPTIONS invariato (bestaudio/best con estensioni)
-        "bestaudio/best",            # senza vincoli di estensione
-        "best",                      # qualsiasi formato disponibile
-    ]
-
-    for fmt in format_fallbacks:
-        opts = dict(YDL_OPTIONS)
-        if fmt is not None:
-            opts["format"] = fmt
-        with yt_dlp.YoutubeDL(opts) as ydl:
+    """Estrae info audio da YouTube.
+    Per ricerche testuali, prova i primi 3 risultati finché uno è accessibile.
+    """
+    # URL diretto: prova e basta
+    if query.startswith("http"):
+        with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
             try:
-                data = ydl.extract_info(query, download=False)
-                if data is None:
-                    return None
-                if "entries" in data:
-                    entries = [e for e in data["entries"] if e]
-                    return entries[0] if entries else None
-                return data
+                return ydl.extract_info(query, download=False)
             except yt_dlp.utils.DownloadError as exc:
-                err = str(exc)
-                if "Requested format is not available" in err:
-                    log.debug(f"yt-dlp formato '{opts.get('format')}' non disponibile, retry...")
-                    continue  # prova il formato successivo
-                # Errore non legato al formato — abbandona
-                log.warning(f"yt-dlp: impossibile trovare '{query}' — {exc}")
+                log.warning(f"yt-dlp: URL non accessibile '{query}' — {exc}")
                 return None
 
-    log.warning(f"yt-dlp: nessun formato disponibile per '{query}'")
+    # Ricerca testuale: recupera top 3 risultati (flat, veloce) poi prova ciascuno
+    with yt_dlp.YoutubeDL({**YDL_FLAT_OPTIONS, "default_search": "ytsearch"}) as ydl:
+        try:
+            flat = ydl.extract_info(f"ytsearch3:{query}", download=False)
+        except yt_dlp.utils.DownloadError:
+            return None
+
+    if not flat or "entries" not in flat:
+        return None
+
+    candidates = [e for e in flat["entries"] if e and e.get("id")]
+
+    for entry in candidates:
+        url = f"https://www.youtube.com/watch?v={entry['id']}"
+        with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+            try:
+                info = ydl.extract_info(url, download=False)
+                if info:
+                    return info
+            except yt_dlp.utils.DownloadError as exc:
+                log.debug(f"yt-dlp: video '{entry['id']}' non disponibile, provo il prossimo — {exc}")
+                continue
+
+    log.warning(f"yt-dlp: nessun risultato accessibile per '{query}'")
     return None
+
 
 
 def _build_song(info: dict, requester: discord.Member) -> Song:
