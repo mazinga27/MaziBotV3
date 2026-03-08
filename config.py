@@ -32,8 +32,11 @@ if _COOKIES_B64:
         _tmp.write(base64.b64decode(_COOKIES_B64))
         _tmp.close()
         _COOKIES_FILE = _tmp.name
+        print(f"[config] ✅ Cookie YouTube caricati da YOUTUBE_COOKIES_B64 → {_COOKIES_FILE}")
     except Exception as _e:
-        print(f"[config] Errore decodifica YOUTUBE_COOKIES_B64: {_e}")
+        print(f"[config] ❌ Errore decodifica YOUTUBE_COOKIES_B64: {_e}")
+else:
+    print("[config] ⚠️  YOUTUBE_COOKIES_B64 non configurata — YouTube potrebbe bloccare le richieste")
 
 # ── Opzioni yt-dlp ────────────────────────────────────────────────────────────
 _ydl_base: dict = {
