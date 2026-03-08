@@ -45,6 +45,8 @@ _ydl_base: dict = {
     "quiet": True,
     "no_warnings": True,
     "default_search": "ytsearch",
+    # Usa il client Android/iOS di YouTube, che non triggera la bot-detection
+    "extractor_args": {"youtube": {"player_client": ["android_music", "ios", "web"]}},
 }
 if _COOKIES_FILE:
     _ydl_base["cookiefile"] = _COOKIES_FILE
@@ -55,5 +57,6 @@ YDL_FLAT_OPTIONS: dict = {
     "quiet": True,
     "no_warnings": True,
     "extract_flat": True,
+    "extractor_args": {"youtube": {"player_client": ["android_music", "ios", "web"]}},
     **(  {"cookiefile": _COOKIES_FILE} if _COOKIES_FILE else {}),
 }
