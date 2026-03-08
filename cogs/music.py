@@ -81,7 +81,8 @@ class GuildState:
 # ── Helpers yt-dlp ────────────────────────────────────────────────────────────
 def _extract_info(query: str) -> Optional[dict]:
     """Estrae info audio da YouTube.
-    Per ricerche testuali, prova i primi 3 risultati finché uno è accessibile.
+    Per ricerche testuali, prova prima con flat+extract (3 candidati);
+    se tutti bloccati, ritenta con ytsearch1 diretto (singolo round-trip).
     """
     # URL diretto: prova e basta
     if query.startswith("http"):
@@ -92,31 +93,38 @@ def _extract_info(query: str) -> Optional[dict]:
                 log.warning(f"yt-dlp: URL non accessibile '{query}' — {exc}")
                 return None
 
-    # Ricerca testuale: recupera top 3 risultati (flat, veloce) poi prova ciascuno
-    with yt_dlp.YoutubeDL({**YDL_FLAT_OPTIONS, "default_search": "ytsearch"}) as ydl:
-        try:
+    # ── Strategia 1: flat search → estrai i 3 migliori candidati uno ad uno ──
+    try:
+        with yt_dlp.YoutubeDL({**YDL_FLAT_OPTIONS, "default_search": "ytsearch"}) as ydl:
             flat = ydl.extract_info(f"ytsearch3:{query}", download=False)
-        except yt_dlp.utils.DownloadError:
+
+        candidates = [e for e in (flat or {}).get("entries", []) if e and e.get("id")]
+
+        for entry in candidates:
+            url = f"https://www.youtube.com/watch?v={entry['id']}"
+            with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
+                try:
+                    info = ydl.extract_info(url, download=False)
+                    if info:
+                        return info
+                except yt_dlp.utils.DownloadError as exc:
+                    log.debug(f"yt-dlp: video '{entry['id']}' non disponibile — {exc}")
+                    continue
+    except yt_dlp.utils.DownloadError:
+        pass
+
+    # ── Strategia 2: ytsearch1 diretto (un solo round-trip, cookie inclusi) ──
+    log.info(f"yt-dlp: flat search fallita per '{query}', ritento con ytsearch1 diretto")
+    with yt_dlp.YoutubeDL({**YDL_OPTIONS, "noplaylist": True}) as ydl:
+        try:
+            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
+            if info and "entries" in info:
+                entries = [e for e in info["entries"] if e]
+                return entries[0] if entries else None
+            return info if info else None
+        except yt_dlp.utils.DownloadError as exc:
+            log.warning(f"yt-dlp: nessun risultato accessibile per '{query}' — {exc}")
             return None
-
-    if not flat or "entries" not in flat:
-        return None
-
-    candidates = [e for e in flat["entries"] if e and e.get("id")]
-
-    for entry in candidates:
-        url = f"https://www.youtube.com/watch?v={entry['id']}"
-        with yt_dlp.YoutubeDL(YDL_OPTIONS) as ydl:
-            try:
-                info = ydl.extract_info(url, download=False)
-                if info:
-                    return info
-            except yt_dlp.utils.DownloadError as exc:
-                log.debug(f"yt-dlp: video '{entry['id']}' non disponibile, provo il prossimo — {exc}")
-                continue
-
-    log.warning(f"yt-dlp: nessun risultato accessibile per '{query}'")
-    return None
 
 
 

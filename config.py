@@ -17,10 +17,6 @@ if not DISCORD_TOKEN:
     raise ValueError("DISCORD_TOKEN mancante nel file .env!")
 
 # ── Cookie YouTube (anti bot-detection) ──────────────────────────────────────
-# Su Railway e altri server cloud, YouTube rifiuta le richieste senza cookie.
-# Esporta i cookie in formato Netscape (.txt) con un'estensione browser,
-# codifica in base64: base64 -i cookies.txt | tr -d '\n'
-# e incolla il risultato nella variabile YOUTUBE_COOKIES_B64 su Railway.
 _COOKIES_B64 = os.getenv("YOUTUBE_COOKIES_B64", "")
 _COOKIES_FILE: str | None = None
 
@@ -39,14 +35,21 @@ else:
     print("[config] ⚠️  YOUTUBE_COOKIES_B64 non configurata — YouTube potrebbe bloccare le richieste")
 
 # ── Opzioni yt-dlp ────────────────────────────────────────────────────────────
+# I player_client android_music/ios/web sono stati bloccati da YouTube sui
+# server cloud. Si usa ora un User-Agent da browser desktop reale + cookie.
+_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/122.0.0.0 Safari/537.36"
+)
+
 _ydl_base: dict = {
     "format": "bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best",
     "noplaylist": True,
     "quiet": True,
     "no_warnings": True,
     "default_search": "ytsearch",
-    # Usa il client Android/iOS di YouTube, che non triggera la bot-detection
-    "extractor_args": {"youtube": {"player_client": ["android_music", "ios", "web"]}},
+    "http_headers": {"User-Agent": _USER_AGENT},
 }
 if _COOKIES_FILE:
     _ydl_base["cookiefile"] = _COOKIES_FILE
@@ -57,6 +60,6 @@ YDL_FLAT_OPTIONS: dict = {
     "quiet": True,
     "no_warnings": True,
     "extract_flat": True,
-    "extractor_args": {"youtube": {"player_client": ["android_music", "ios", "web"]}},
-    **(  {"cookiefile": _COOKIES_FILE} if _COOKIES_FILE else {}),
+    "http_headers": {"User-Agent": _USER_AGENT},
+    **({"cookiefile": _COOKIES_FILE} if _COOKIES_FILE else {}),
 }
